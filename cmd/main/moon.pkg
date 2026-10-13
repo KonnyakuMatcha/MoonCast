@@ -1,0 +1,5 @@
+// import {
+//   "konnyakumatcha/moocast" @lib,
+// }
+
+pkgtype(kind: "executable")

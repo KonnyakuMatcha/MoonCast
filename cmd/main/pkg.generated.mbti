@@ -1,0 +1,15 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "konnyakumatcha/moocast/cmd/main"
+
+// Values
+
+// Errors
+
+// Types and methods
+type AppState
+
+type Participant
+
+// Type aliases
+
+// Traits

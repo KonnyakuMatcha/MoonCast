@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MoonCast</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>MoonCast</h1>
+      <p>MoonBit + WebRTC 纯 P2P 屏幕共享</p>
+    </header>
+
+    <section id="lobby" class="panel">
+      <label>
+        昵称
+        <input id="name-input" maxlength="24" autocomplete="nickname" placeholder="你的名字">
+      </label>
+      <label>
+        房间码
+        <input id="code-input" maxlength="6" autocomplete="off" placeholder="ABC123">
+      </label>
+      <div class="actions">
+        <button id="create-button">创建房间</button>
+        <button id="join-button">加入房间</button>
+      </div>
+      <p id="lobby-status" class="status"></p>
+    </section>
+
+    <section id="room" class="panel hidden">
+      <div class="room-bar">
+        <span id="room-code"></span>
+        <span id="signal-status">信令已连接</span>
+        <button id="leave-button">离开</button>
+      </div>
+      <div class="stage-wrap">
+        <video id="stage-video" autoplay playsinline></video>
+        <div id="stage-placeholder">等待房主共享屏幕</div>
+      </div>
+      <div class="controls">
+        <button id="start-button">共享屏幕和声音</button>
+        <button id="stop-button" class="hidden">停止共享</button>
+      </div>
+      <p id="stage-status" class="status"></p>
+      <ul id="participant-list"></ul>
+    </section>
+  </main>
+  <script src="/bridge.js"></script>
+  <script src="/main.js"></script>
+</body>
+</html>
