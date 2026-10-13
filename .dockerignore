@@ -1,0 +1,7 @@
+.git
+.DS_Store
+_build
+target
+node_modules
+__pycache__
+*.pyc
