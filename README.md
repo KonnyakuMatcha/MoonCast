@@ -1,3 +1,5 @@
+[![CI](https://github.com/KonnyakuMatcha/MoonCast/actions/workflows/ci.yml/badge.svg)](https://github.com/KonnyakuMatcha/MoonCast/actions/workflows/ci.yml)
+
 # MoonCast · MoonBit 纯 P2P 直播协作
 
 MoonCast 是参加 [2026 MoonBit 黑客松](https://moonbitlang.github.io/Hackathon2026/) 的作品。它把我此前开发的 [Syncast](https://github.com/KonnyakuMatcha/Syncast) 核心直播体验用 MoonBit 重新实现为一个可运行、可验证的浏览器应用：房主共享屏幕和来源声音，成员进行语音通话，媒体数据始终在浏览器之间直接传输。
