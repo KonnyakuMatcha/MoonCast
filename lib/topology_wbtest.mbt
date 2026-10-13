@@ -1,4 +1,19 @@
 ///|
+test "empty rooms produce no stage links" {
+  let plan = plan_stage_topology([], 3)
+  assert_eq(plan.length(), 0)
+}
+
+///|
+test "nonpositive relay limits fall back to direct host links" {
+  let plan = plan_stage_topology(["a", "b", "c"], 0)
+  assert_eq(plan.length(), 3)
+  assert_eq(plan[0], ("a", "host"))
+  assert_eq(plan[1], ("b", "host"))
+  assert_eq(plan[2], ("c", "host"))
+}
+
+///|
 test "small rooms stay directly connected to the host" {
   let plan = plan_stage_topology(["a", "b", "c"], 3)
   assert_eq(plan.length(), 3)
