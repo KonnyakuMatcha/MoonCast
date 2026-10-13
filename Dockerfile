@@ -5,7 +5,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl python3 xz-utils \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
-ENV PATH="/root/.moonbit/bin:${PATH}"
+ENV PATH="/root/.moon/bin:${PATH}"
 WORKDIR /src
 COPY . .
 RUN ./scripts/build.sh

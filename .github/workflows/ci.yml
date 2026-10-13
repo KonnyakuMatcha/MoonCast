@@ -17,6 +17,6 @@ jobs:
         run: curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
       - name: Build and test
         run: |
-          echo "$HOME/.moonbit/bin" >> "$GITHUB_PATH"
-          export PATH="$HOME/.moonbit/bin:$PATH"
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.moon/bin:$PATH"
           ./scripts/build.sh
