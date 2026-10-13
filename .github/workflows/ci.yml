@@ -18,4 +18,5 @@ jobs:
       - name: Build and test
         run: |
           echo "$HOME/.moonbit/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/.moonbit/bin:$PATH"
           ./scripts/build.sh
