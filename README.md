@@ -1,6 +1,6 @@
 # MoonCast · MoonBit 纯 P2P 屏幕共享
 
-MoonCast 是参加 [2026 MoonBit 黑客松](https://moonbitlang.github.io/Hackathon2026/) 的作品。它把 Syncast 的核心直播体验压缩成一个可运行、可验证的 MoonBit 浏览器应用：房主共享屏幕和来源声音，观众通过 WebRTC 直接接收，媒体数据不经过服务器。
+MoonCast 是参加 [2026 MoonBit 黑客松](https://moonbitlang.github.io/Hackathon2026/) 的作品。它把我此前开发的 [Syncast](https://github.com/KonnyakuMatcha/Syncast) 核心直播体验压缩成一个可运行、可验证的 MoonBit 浏览器应用：房主共享屏幕和来源声音，观众通过 WebRTC 直接接收，媒体数据不经过服务器。
 
 项目目标不是复刻 Syncast 的全部工程能力，而是先验证一条清晰的 MoonBit + WebRTC 路径：**用 MoonBit 管理客户端状态与协商流程，用浏览器原生能力完成 P2P 传输**。
 
@@ -175,6 +175,6 @@ moon test
 4. **质量选择**：增加发送参数与接收端观看档位。
 5. **浅层树状转发**：在保持纯 P2P 的前提下降低房主上行压力。
 
-## 致谢
+## 项目关系
 
-项目参考并精简复现了 [Syncast](https://github.com/KonnyakuMatcha/Syncast) 的核心思路。Syncast 提供了更完整的直播协作、健康恢复和拓扑调度设计；MoonCast 将其中最适合黑客松验证的基础 P2P 链路用 MoonBit 重新实现。
+[Syncast](https://github.com/KonnyakuMatcha/Syncast) 同样是我的开源项目，提供了更完整的直播协作、健康恢复和拓扑调度设计。MoonCast 不是第三方复刻，而是在同一作者的架构经验基础上，将最适合黑客松验证的基础 P2P 链路用 MoonBit 重新实现。
