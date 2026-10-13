@@ -2,4 +2,8 @@
 //   "konnyakumatcha/moocast" @lib,
 // }
 
+import {
+  "konnyakumatcha/moocast/lib" @topology,
+}
+
 pkgtype(kind: "executable")

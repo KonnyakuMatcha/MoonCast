@@ -178,6 +178,7 @@ class MoonCastHandler(BaseHTTPRequestHandler):
             "clientId": participant.client_id,
             "sessionToken": participant.token,
             "hostId": room.host_id,
+            "isHost": participant.client_id == room.host_id,
             "sequence": room.next_sequence - 1,
             "iceServers": [{"urls": [DEFAULT_STUN_URL]}],
             "participants": [

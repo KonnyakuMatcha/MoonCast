@@ -3,14 +3,22 @@
 
   const bridge = {};
   const peers = new Map();
-  const remoteStreams = new Map();
   const pendingCandidates = new Map();
+  const voiceStreams = new Map();
+  const stageSenderIds = new Set();
   let eventCallback = null;
   let session = null;
   let polling = false;
+  let stageRemoteStream = null;
 
-  function emit(type, first = "", second = "", third = "") {
-    if (eventCallback) eventCallback(type, first, second, third);
+  const qualityProfiles = {
+    smooth: { height: 720, maxBitrate: 5_000_000, maxFramerate: 30 },
+    clear: { height: 1080, maxBitrate: 10_000_000, maxFramerate: 30 },
+    high: { height: 1080, maxBitrate: 20_000_000, maxFramerate: 60 },
+  };
+
+  function emit(type, first = "", second = "", third = "", fourth = "") {
+    if (eventCallback) eventCallback(type, first, second, third, fourth);
   }
 
   function element(id) {
@@ -20,6 +28,10 @@
   function errorText(error) {
     if (error && error.message) return String(error.message);
     return String(error || "操作失败");
+  }
+
+  function peerKey(channel, peerId) {
+    return `${channel}:${peerId}`;
   }
 
   async function request(path, options = {}) {
@@ -65,11 +77,17 @@
             } else if (event.type === "signal") {
               const data = event.payload.data || {};
               if (data.type === "description") {
-                emit("signal", event.payload.from, "description", JSON.stringify(data.description));
+                emit("signal", event.payload.from, data.channel, "description", JSON.stringify(data.description));
               } else if (data.type === "candidate") {
-                emit("signal", event.payload.from, "candidate", JSON.stringify(data.candidate));
-              } else if (data.type === "stage-start" || data.type === "stage-stop") {
-                emit("signal", event.payload.from, "control", data.type);
+                emit("signal", event.payload.from, data.channel, "candidate", JSON.stringify(data.candidate));
+              } else if (data.type === "stage-topology") {
+                emit("signal", event.payload.from, data.channel, "topology", String(data.value || ""));
+              } else if (data.type === "stage-quality") {
+                emit("signal", event.payload.from, data.channel, "quality", String(data.value || "high"));
+              } else if (data.type === "member-state") {
+                emit("signal", event.payload.from, data.channel, "member-state", String(data.value || ""));
+              } else {
+                emit("signal", event.payload.from, data.channel, "control", data.type || "");
               }
             }
           }
@@ -97,16 +115,44 @@
       hostId: payload.hostId,
       iceServers: payload.iceServers || [],
     };
+  }
+
+  function emitParticipants(payload) {
     for (const participant of payload.participants) {
       emit("participant", participant.id, participant.name, String(participant.isHost));
     }
   }
 
-  function closePeer(peerId) {
-    const peer = peers.get(peerId);
+  function closePeer(channel, peerId) {
+    const key = peerKey(channel, peerId);
+    const peer = peers.get(key);
     if (peer) peer.close();
-    peers.delete(peerId);
-    remoteStreams.delete(peerId);
+    peers.delete(key);
+    pendingCandidates.delete(key);
+    if (channel === "voice") {
+      voiceStreams.delete(peerId);
+      element("remote-audio").querySelector(`[data-peer-id="${CSS.escape(peerId)}"]`)?.remove();
+    }
+    if (channel === "stage") stageSenderIds.delete(peerId);
+  }
+
+  function ensureVoiceAudio(peerId) {
+    let stream = voiceStreams.get(peerId);
+    if (!stream) {
+      stream = new MediaStream();
+      voiceStreams.set(peerId, stream);
+    }
+    let audio = element("remote-audio").querySelector(`[data-peer-id="${CSS.escape(peerId)}"]`);
+    if (!audio) {
+      audio = document.createElement("audio");
+      audio.autoplay = true;
+      audio.playsInline = true;
+      audio.dataset.peerId = peerId;
+      element("remote-audio").append(audio);
+    }
+    if (audio.srcObject !== stream) audio.srcObject = stream;
+    audio.play().catch(() => {});
+    return stream;
   }
 
   bridge.initialize = (callback) => {
@@ -121,6 +167,7 @@
       .then((payload) => {
         beginSession(payload);
         callback("", payload.roomCode, payload.clientId, payload.sessionToken);
+        emitParticipants(payload);
         startEvents(payload.sequence);
       })
       .catch((error) => callback(errorText(error), "", "", ""));
@@ -134,15 +181,20 @@
       .then((payload) => {
         beginSession(payload);
         callback("", payload.roomCode, payload.clientId, payload.sessionToken, payload.hostId);
+        emitParticipants(payload);
         startEvents(payload.sequence);
       })
       .catch((error) => callback(errorText(error), "", "", "", ""));
   };
 
-  bridge.sendSignal = (to, type, payload) => {
+  bridge.sendSignal = (to, channel, type, payload) => {
     if (!session) return;
-    const data = { type };
-    if (type === "description" || type === "candidate") data[type] = JSON.parse(payload);
+    const data = { channel, type };
+    if (type === "description" || type === "candidate") {
+      data[type] = JSON.parse(payload);
+    } else {
+      data.value = payload;
+    }
     request(`/api/rooms/${session.roomCode}/signal`, {
       method: "POST",
       body: JSON.stringify({ clientId: session.clientId, to, data }),
@@ -154,7 +206,10 @@
     const current = session;
     polling = false;
     session = null;
-    for (const peerId of [...peers.keys()]) closePeer(peerId);
+    for (const key of [...peers.keys()]) {
+      const [channel, peerId] = key.split(":");
+      closePeer(channel, peerId);
+    }
     request(`/api/rooms/${current.roomCode}/leave`, {
       method: "DELETE",
       body: JSON.stringify({ clientId: current.clientId }),
@@ -180,19 +235,21 @@
     element("participant-list").replaceChildren();
   };
 
-  bridge.addParticipant = (id, name, isHost, connected) => {
+  bridge.addParticipant = (id, name, isHost, voiceConnected, stageConnected, muted) => {
     const item = document.createElement("li");
     item.dataset.participantId = id;
-    item.textContent = `${name}${isHost ? "（房主）" : ""} · ${connected ? "已连接" : "等待连接"}`;
+    const title = document.createElement("strong");
+    title.textContent = `${name}${isHost ? "（房主）" : ""}`;
+    const detail = document.createElement("span");
+    detail.textContent = `语音 ${voiceConnected ? "已连接" : "等待"} · 画面 ${stageConnected ? "已连接" : "等待"}${muted ? " · 已静音" : ""}`;
+    item.append(title, detail);
     element("participant-list").append(item);
   };
 
-  bridge.updateParticipant = (id, connected) => {
+  bridge.updateParticipant = (id, voiceConnected, stageConnected, muted) => {
     const item = [...element("participant-list").children].find((child) => child.dataset.participantId === id);
-    if (item) {
-      const label = item.textContent.split(" · ")[0];
-      item.textContent = `${label} · ${connected ? "已连接" : "等待连接"}`;
-    }
+    if (!item) return;
+    item.querySelector("span").textContent = `语音 ${voiceConnected ? "已连接" : "等待"} · 画面 ${stageConnected ? "已连接" : "等待"}${muted ? " · 已静音" : ""}`;
   };
 
   bridge.removeParticipant = (id) => {
@@ -203,7 +260,7 @@
   bridge.startSharing = (callback) => {
     navigator.mediaDevices
       .getDisplayMedia({
-        video: { frameRate: { ideal: 30, max: 30 } },
+        video: { frameRate: { ideal: 60, max: 60 } },
         audio: {
           channelCount: 2,
           echoCancellation: false,
@@ -231,41 +288,105 @@
     element("stage-video").srcObject = null;
   };
 
-  bridge.createPeer = (peerId, isHost) => {
-    if (peers.has(peerId)) return;
+  bridge.startMicrophone = (callback) => {
+    navigator.mediaDevices
+      .getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      })
+      .then((stream) => {
+        bridge.microphoneStream = stream;
+        for (const track of stream.getTracks()) {
+          track.addEventListener("ended", () => emit("microphone-ended"), { once: true });
+        }
+        for (const [key, peer] of peers) {
+          if (!key.startsWith("voice:")) continue;
+          for (const track of stream.getTracks()) peer.addTrack(track, stream);
+        }
+        callback(true, "");
+      })
+      .catch((error) => callback(false, errorText(error)));
+  };
+
+  bridge.stopMicrophone = () => {
+    if (!bridge.microphoneStream) return;
+    for (const track of bridge.microphoneStream.getTracks()) track.stop();
+    bridge.microphoneStream = null;
+  };
+
+  bridge.setMicrophoneEnabled = (enabled) => {
+    if (!bridge.microphoneStream) return;
+    for (const track of bridge.microphoneStream.getAudioTracks()) track.enabled = enabled;
+  };
+
+  bridge.setStageSoundEnabled = (enabled) => {
+    bridge.stageSoundEnabled = enabled;
+    element("stage-video").muted = !enabled;
+  };
+
+  bridge.createPeer = (channel, peerId, isSender) => {
+    const key = peerKey(channel, peerId);
+    if (peers.has(key)) return;
     const peer = new RTCPeerConnection({ iceServers: session ? session.iceServers : [] });
-    peers.set(peerId, peer);
+    peers.set(key, peer);
     peer.onicecandidate = (event) => {
       if (!event.candidate) return;
       if (/typ relay/i.test(event.candidate.candidate || "")) return;
-      emit("ice", peerId, JSON.stringify(event.candidate));
+      emit("ice", channel, peerId, JSON.stringify(event.candidate));
     };
     peer.ontrack = (event) => {
-      let stream = remoteStreams.get(peerId);
-      if (!stream) {
-        stream = new MediaStream();
-        remoteStreams.set(peerId, stream);
+      if (channel === "voice") {
+        ensureVoiceAudio(peerId).addTrack(event.track);
+      } else {
+        if (!stageRemoteStream) stageRemoteStream = new MediaStream();
+        stageRemoteStream.addTrack(event.track);
+        const video = element("stage-video");
+        video.srcObject = stageRemoteStream;
+        video.muted = !bridge.stageSoundEnabled;
+        video.play().catch(() => {});
+        for (const childId of stageSenderIds) {
+          const key = peerKey("stage", childId);
+          const peer = peers.get(key);
+          if (peer.connectionState === "closed") continue;
+          const sender = peer.getSenders().find((item) => item.track?.kind === event.track.kind);
+          if (sender) {
+            if (sender.track !== event.track) sender.replaceTrack(event.track).catch(() => {});
+          } else {
+            peer.addTrack(event.track, stageRemoteStream);
+            if (peer.signalingState === "stable") {
+              peer
+                .createOffer()
+                .then((description) => peer.setLocalDescription(description))
+                .then(() => bridge.sendSignal(childId, "stage", "description", JSON.stringify(peer.localDescription)))
+                .catch((error) => emit("signal-error", errorText(error)));
+            }
+          }
+        }
       }
-      stream.addTrack(event.track);
-      const video = element("stage-video");
-      video.srcObject = stream;
-      video.play().catch(() => {});
-      emit("track", peerId, event.track.kind);
+      emit("track", channel, peerId, event.track.kind);
     };
-    peer.onconnectionstatechange = () => emit("state", peerId, peer.connectionState);
-    if (isHost && bridge.displayStream) {
-      for (const track of bridge.displayStream.getTracks()) peer.addTrack(track, bridge.displayStream);
+    peer.onconnectionstatechange = () => emit("state", channel, peerId, peer.connectionState);
+    if (channel === "voice" && bridge.microphoneStream) {
+      for (const track of bridge.microphoneStream.getTracks()) peer.addTrack(track, bridge.microphoneStream);
+    }
+    if (channel === "stage" && isSender) {
+      stageSenderIds.add(peerId);
+      const source = bridge.displayStream || stageRemoteStream;
+      if (source) for (const track of source.getTracks()) peer.addTrack(track, source);
     }
   };
 
-  bridge.createOffer = (peerId, callback) => {
-    const peer = peers.get(peerId);
+  bridge.createOffer = (channel, peerId, iceRestart, callback) => {
+    const peer = peers.get(peerKey(channel, peerId));
     if (!peer) {
       callback(false, "");
       return;
     }
     peer
-      .createOffer()
+      .createOffer({ iceRestart })
       .then((description) => peer.setLocalDescription(description))
       .then(() => callback(true, JSON.stringify(peer.localDescription)))
       .catch((error) => {
@@ -274,8 +395,8 @@
       });
   };
 
-  bridge.handleDescription = (peerId, descriptionJson, callback) => {
-    const peer = peers.get(peerId);
+  bridge.handleDescription = (channel, peerId, descriptionJson, callback) => {
+    const peer = peers.get(peerKey(channel, peerId));
     if (!peer) {
       callback(false, "");
       return;
@@ -283,8 +404,8 @@
     peer
       .setRemoteDescription(JSON.parse(descriptionJson))
       .then(() => {
-        const candidates = pendingCandidates.get(peerId) || [];
-        pendingCandidates.delete(peerId);
+        const candidates = pendingCandidates.get(peerKey(channel, peerId)) || [];
+        pendingCandidates.delete(peerKey(channel, peerId));
         return Promise.all(candidates.map((candidate) => peer.addIceCandidate(candidate)));
       })
       .then(() => {
@@ -303,8 +424,9 @@
       });
   };
 
-  bridge.addCandidate = (peerId, candidateJson, callback) => {
-    const peer = peers.get(peerId);
+  bridge.addCandidate = (channel, peerId, candidateJson, callback) => {
+    const key = peerKey(channel, peerId);
+    const peer = peers.get(key);
     if (!peer) {
       callback(false);
       return;
@@ -315,9 +437,9 @@
       return;
     }
     if (!peer.remoteDescription) {
-      const candidates = pendingCandidates.get(peerId) || [];
+      const candidates = pendingCandidates.get(key) || [];
       candidates.push(candidate);
-      pendingCandidates.set(peerId, candidates);
+      pendingCandidates.set(key, candidates);
       callback(true);
       return;
     }
@@ -330,12 +452,31 @@
       });
   };
 
+  bridge.setSenderQuality = (channel, peerId, quality) => {
+    const peer = peers.get(peerKey(channel, peerId));
+    const profile = qualityProfiles[quality] || qualityProfiles.high;
+    const sender = peer?.getSenders().find((item) => item.track?.kind === "video");
+    if (!sender) return;
+    const parameters = sender.getParameters();
+    const sourceHeight = sender.track.getSettings().height || profile.height;
+    parameters.encodings = parameters.encodings?.length ? parameters.encodings : [{}];
+    parameters.encodings[0].scaleResolutionDownBy = Math.max(1, sourceHeight / profile.height);
+    parameters.encodings[0].maxBitrate = profile.maxBitrate;
+    parameters.encodings[0].maxFramerate = profile.maxFramerate;
+    parameters.degradationPreference = quality === "high" ? "maintain-framerate" : "maintain-resolution";
+    sender.setParameters(parameters).catch((error) => emit("signal-error", errorText(error)));
+  };
+
   bridge.closePeer = closePeer;
 
-  bridge.getPeerState = (peerId) => {
-    const peer = peers.get(peerId);
+  bridge.getPeerState = (channel, peerId) => {
+    const peer = peers.get(peerKey(channel, peerId));
     if (!peer) return "closed";
     return `${peer.connectionState}/${peer.iceConnectionState}`;
+  };
+
+  bridge.schedule = (callback, delay) => {
+    setTimeout(callback, delay);
   };
 
   global.MoonCastBridge = bridge;

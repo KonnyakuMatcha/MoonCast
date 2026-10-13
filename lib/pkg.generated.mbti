@@ -1,0 +1,13 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "konnyakumatcha/moocast/lib"
+
+// Values
+pub fn plan_stage_topology(Array[String], Int) -> Array[(String, String)]
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits

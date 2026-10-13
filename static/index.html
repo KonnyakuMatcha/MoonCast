@@ -43,9 +43,24 @@
       <div class="controls">
         <button id="start-button">共享屏幕和声音</button>
         <button id="stop-button" class="hidden">停止共享</button>
+        <button id="mute-button">静音麦克风</button>
+        <button id="stage-sound-button">关闭共享声音</button>
+        <button id="reconnect-button">重新连接</button>
+        <label class="quality-label">
+          画质
+          <select id="quality-select">
+            <option value="smooth">流畅 720p30</option>
+            <option value="clear">清晰 1080p30</option>
+            <option value="high" selected>高帧 1080p60</option>
+          </select>
+        </label>
       </div>
-      <p id="stage-status" class="status"></p>
+      <div class="status-grid">
+        <p id="voice-status" class="status"></p>
+        <p id="stage-status" class="status"></p>
+      </div>
       <ul id="participant-list"></ul>
+      <div id="remote-audio" class="hidden-audio"></div>
     </section>
   </main>
   <script src="/bridge.js"></script>
