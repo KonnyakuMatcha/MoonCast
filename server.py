@@ -146,12 +146,18 @@ STORE = RoomStore()
 class MoonCastHandler(BaseHTTPRequestHandler):
     server_version = "MoonCast/0.1"
 
+    def send_security_headers(self) -> None:
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+
     def log_message(self, fmt: str, *args: object) -> None:
         print(f"[{self.log_date_time_string()}] {fmt % args}")
 
     def send_json(self, payload: dict | list, status: HTTPStatus = HTTPStatus.OK) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
+        self.send_security_headers()
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
@@ -310,6 +316,7 @@ class MoonCastHandler(BaseHTTPRequestHandler):
         body = file_path.read_bytes()
         content_type = mimetypes.guess_type(file_path)[0] or "application/octet-stream"
         self.send_response(HTTPStatus.OK)
+        self.send_security_headers()
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")

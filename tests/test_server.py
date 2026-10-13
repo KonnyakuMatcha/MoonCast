@@ -109,6 +109,12 @@ class MoonCastServerTest(unittest.TestCase):
         self.assertTrue(payload["p2p"])
         self.assertFalse(payload["turn"])
 
+    def test_responses_include_security_headers(self):
+        with urllib.request.urlopen(self.base_url + "/api/health", timeout=2) as response:
+            self.assertEqual(response.headers["X-Content-Type-Options"], "nosniff")
+            self.assertEqual(response.headers["X-Frame-Options"], "DENY")
+            self.assertEqual(response.headers["Referrer-Policy"], "no-referrer")
+
     def test_invalid_join_returns_error(self):
         with self.assertRaises(urllib.error.HTTPError) as context:
             self.request("/api/rooms/AAAAAA/join", "POST", {"name": "Guest"})
